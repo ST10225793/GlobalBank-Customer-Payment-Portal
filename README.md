@@ -104,5 +104,4 @@ This project is licensed under the MIT License
 
 This README gives you a **professional, complete documentation** for your system with Express backend and Firebase Realtime Database.  
 
-Would you like me to also add a **sample API endpoint section** (e.g., `/api/payments`, `/api/customers`) so developers know how to interact with the backend right away?
-Open a Pull Request
+
