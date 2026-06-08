@@ -1,25 +1,33 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contex/AuthContext';
-import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase'; // 1. Import the pre-initialized db instance
+
+// 2. ONLY import data methods. Do NOT import getDatabase here.
+import { ref, get, update } from 'firebase/database'; 
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const StaffDashboard = () => {
   const { user, logout } = useAuth();
-  console.log('Staff user:', user);  // Add this
-console.log('User UID:', user?.uid);  // Add this
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Fetch all payments from Firestore
+  // 3. Use the imported 'db' instead of 'localDb'
   const { data: payments, isLoading } = useQuery({
     queryKey: ['allPayments'],
     queryFn: async () => {
-      const snapshot = await getDocs(collection(db, 'payments'));
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const paymentsRef = ref(db, 'payments');
+      const snapshot = await get(paymentsRef);
+      if (!snapshot.exists()) return [];
+      
+      const rawData = snapshot.val();
+      return Object.keys(rawData).map(key => ({
+        id: key,
+        ...rawData[key]
+      }));
     }
   });
 
@@ -31,13 +39,14 @@ console.log('User UID:', user?.uid);  // Add this
     submittedToSwift: payments?.filter(p => p.submittedToSwift === true).length || 0
   };
 
-  // Verify mutation - updates Firestore
+  // REALTIME DATABASE UPGRADE: Verification mutation using isolated key-path updates
+  // 4. Use 'db' in mutations
   const verifyMutation = useMutation({
     mutationFn: async (paymentId) => {
-      const paymentRef = doc(db, 'payments', paymentId);
-      await updateDoc(paymentRef, {
+      const paymentRef = ref(db, `payments/${paymentId}`);
+      await update(paymentRef, {
         verified: true,
-        verifiedBy: user?.uid,
+        verifiedBy: user?.uid || 'Unknown_Staff_ID',
         verifiedAt: new Date().toISOString(),
         status: 'verified'
       });
@@ -48,11 +57,11 @@ console.log('User UID:', user?.uid);  // Add this
     }
   });
 
-  // Submit to SWIFT mutation
+  // REALTIME DATABASE UPGRADE: SWIFT submission mutation using isolated key-path updates
   const submitMutation = useMutation({
     mutationFn: async (paymentId) => {
-      const paymentRef = doc(db, 'payments', paymentId);
-      await updateDoc(paymentRef, {
+      const paymentRef = ref(db, `payments/${paymentId}`);
+      await update(paymentRef, {
         submittedToSwift: true,
         submittedAt: new Date().toISOString(),
         status: 'submitted'
@@ -107,24 +116,30 @@ console.log('User UID:', user?.uid);  // Add this
     }
   };
 
-  return (
+ return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
       <nav className="backdrop-blur-xl bg-white/10 border-b border-white/20 sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                <span className="text-white font-bold text-xl">GB</span>
-              </div>
+              {/* ... logo/title ... */}
               <div>
                 <h1 className="text-2xl font-bold text-white">Staff Portal</h1>
                 <p className="text-white/50 text-xs">Payment Operations</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-4">
+              {/* NEW PROVISIONING BUTTON */}
+              <button
+                onClick={() => navigate('/staff/provisioning')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-sm font-semibold shadow-lg"
+              >
+                + New Customer
+              </button>
+
               <span className="text-white/80 text-sm hidden md:block">
-                Welcome, {user?.name || 'Staff'}
+                Welcome, {user?.fullName || user?.name || 'Staff User'}
               </span>
               <button
                 onClick={logout}

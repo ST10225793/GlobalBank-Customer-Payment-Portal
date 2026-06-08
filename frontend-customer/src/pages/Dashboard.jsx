@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contex/AuthContext';
-import { db } from '../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+
+// REALTIME DATABASE UPGRADE: Pull clean independent query utilities
+import { ref, get, query, orderByChild, equalTo, getDatabase } from 'firebase/database'; 
+
 import { useQuery } from '@tanstack/react-query';
 import CreditCard from '../components/CreditCard';
 import CardActions from '../components/CardActions';
 import useSessionTimeout from '../hooks/useSessionTimeout';
 import SessionWarningModal from '../components/SessionWarningModal';
+
+// Initialize a pure, standalone Realtime Database connector instance locally to break legacy ties
+const localDb = getDatabase();
 
 // QR Scanner Button Component (mobile-only)
 const QrScannerButton = ({ onClick }) => (
@@ -29,21 +34,27 @@ const Dashboard = () => {
     pendingCount: 0
   });
 
-  // Fetch user's payments from Firestore
+  // REALTIME DATABASE UPGRADE: Query user's payments directly from the JSON hierarchy tree
   const { data: payments, isLoading } = useQuery({
     queryKey: ['myPayments', user?.uid],
     queryFn: async () => {
       if (!user?.uid) return [];
-      const q = query(collection(db, 'payments'), where('customerId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      const paymentsRef = ref(localDb, 'payments');
+      const paymentsQuery = query(paymentsRef, orderByChild('customerId'), equalTo(user.uid));
+      const snapshot = await get(paymentsQuery);
+      
+      if (!snapshot.exists()) return [];
+      
+      const rawData = snapshot.val();
+      return Object.keys(rawData).map(key => ({ id: key, ...rawData[key] }));
     },
     enabled: !!user?.uid
   });
 
   useEffect(() => {
     if (payments && payments.length > 0) {
-      const total = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      const total = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
       const pending = payments.filter(p => p.status === 'pending').length;
       setStats({
         totalPayments: payments.length,
@@ -233,9 +244,6 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* QR Scanner Button */}
-      <QrScannerButton onClick={() => setShowScanner(true)} />
 
       {/* QR Scanner Modal */}
       {showScanner && (

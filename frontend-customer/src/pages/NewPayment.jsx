@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contex/AuthContext'; // Fixed path
-import { db } from '../firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { useAuth } from '../contex/AuthContext'; 
+
+// REALTIME DATABASE UPGRADE: Pull structural push methods and isolated connection getter
+import { ref, push, set, getDatabase } from 'firebase/database'; 
+
 import { useMutation } from '@tanstack/react-query';
+
+// Standalone initialization layer breaking legacy cross-library communication channels
+const localDb = getDatabase();
 
 const NewPayment = () => {
   const { user } = useAuth();
@@ -105,21 +110,25 @@ const NewPayment = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Submit payment to Firestore
+  // REALTIME DATABASE UPGRADE: Submit payment using explicit sequential pushing nodes
   const submitMutation = useMutation({
     mutationFn: async (paymentData) => {
-      // Save to Firestore payments collection
-      const docRef = await addDoc(collection(db, 'payments'), {
+      const paymentsRef = ref(localDb, 'payments');
+      const newPaymentKeyRef = push(paymentsRef); // Generates clean historical sequence key node
+      
+      const payload = {
         ...paymentData,
-        customerId: user?.uid,
-        customerName: user?.fullName,
-        customerAccount: user?.accountNumber,
+        customerId: user?.uid || 'Unknown_Client_ID',
+        customerName: user?.fullName || 'System Client',
+        customerAccount: user?.accountNumber || 'Unknown_Account_ID',
         status: 'pending',
         verified: false,
         submittedToSwift: false,
         createdAt: new Date().toISOString()
-      });
-      return { id: docRef.id, ...paymentData };
+      };
+      
+      await set(newPaymentKeyRef, payload);
+      return { id: newPaymentKeyRef.key, ...payload };
     },
     onSuccess: (data) => {
       navigate('/confirmation', { state: { payment: data } });

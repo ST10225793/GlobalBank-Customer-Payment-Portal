@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDMBW769bWYyz32GBkgesh8ztRJg8CRUdo",
@@ -12,7 +12,8 @@ const firebaseConfig = {
   appId: "1:310545241999:web:caa7c185fdc59e0ffeddfa"
 };
 
-const app = initializeApp(firebaseConfig);
+// This check is the "lock" that prevents the fatal error
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getDatabase(app);
